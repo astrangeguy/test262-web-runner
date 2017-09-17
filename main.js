@@ -2,9 +2,15 @@
 
 // var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
 var zipballUrl = 'tc39-test262-8fe11a6.zip';
+var coreJsUrl = 'shim.min.js';
 
 var skippedRegex = /integer-limit/; // todo this should not be here, and should probably be exposed
 
+var useCoreJS;
+var coreJsXHR;
+var coreJsScript;
+
+var envScript = document.createElement('script');
 
 // queue/fetch primitives
 
@@ -268,6 +274,10 @@ function runSources(arg, done) {
       w.document.body.appendChild(script);
     }
 
+    if (useCoreJS.checked) {
+      w.document.head.appendChild(coreJsScript);
+    }
+    append(envScript.textContent, false);
     append(arg.setup, false);
     append(arg.source, arg.isModule);
 
@@ -432,11 +442,18 @@ function increment(ancestors) {
 }
 
 function runSubtree(root, then, ancestors, toExpand) {
-  if (root.passes) {
-    then(root.passes, root.fails, root.skips);
-    return;
+  var status = root.querySelector('span res');
+  if (root.doneCount > 0) {
+    delete root.passes;
+    delete root.fails;
+    delete root.skips;
+    root.doneCount = 0;
+    status.textContent = '';
+    var progress = root.querySelector('span span');
+    progress.textContent = makeProgressBar(root.doneCount, root.totalCount);
+    progress.style.display = '';
+
   }
-  var status = root.querySelector('span');
   if (root.path) { // i.e. is a file
     if (skippedRegex.test(root.path[root.path.length - 1])) {
       status.textContent = 'Skipped by runner.';
@@ -527,6 +544,10 @@ function runSubtree(root, then, ancestors, toExpand) {
           root.passes = passCount;
           root.fails = failCount;
           root.skips = skipCount;
+
+          var progress = root.querySelector('span span');
+          progress.style.display = 'none';
+
           then(passCount, failCount, skipCount);
         }
       }, ancestors.concat([root]), !seenNovel && children[i].passes === undefined ? toExpand.concat([root]) : []);
@@ -543,6 +564,7 @@ function runTree(root) {
   for (var i = 0; i < runs.length; ++i) {
     runs[i].style.display = 'none';
   }
+
 
   var ancestors = [];
   for (var current = root; current.id !== 'tree'; current = current.parentNode.parentNode) {
@@ -573,6 +595,8 @@ function addRunLink(ele) {
     e.stopPropagation();
     runTree(ele);
   });
+
+  status.appendChild(document.createElement('res'));
 
   var progressEle = status.appendChild(document.createElement('span'));
   progressEle.style.display = 'none';
@@ -694,8 +718,12 @@ window.addEventListener('load', function() {
   var buttons = document.getElementById('buttons');
   var loadStatus = document.getElementById('loadStatus');
 
+  fileEle.value = ''; // so that the change event is still fired after reloads
+
   fileEle.addEventListener('change', function() {
-    if (!fileEle.files[0]) return;
+    if (!fileEle.files[0]) {
+      return;
+    }
     loadStatus.style.display = 'inline-block';
     loadStatus.textContent = 'Reading...';
     loadZip(fileEle.files[0])
@@ -705,6 +733,21 @@ window.addEventListener('load', function() {
 
   document.getElementById('loadLocal').addEventListener('click', function() {
     fileEle.click();
+  });
+
+  useCoreJS = document.getElementById('use-corejs');
+
+  useCoreJS.addEventListener('change', function() {
+    if (useCoreJS.checked && !coreJsXHR) {
+      coreJsXHR = new XMLHttpRequest();
+      coreJsXHR.addEventListener('load', function() {
+        var newScript = document.createElement('script');
+        newScript.text = coreJsXHR.responseText;
+        coreJsScript = newScript;
+      });
+      coreJsXHR.open('GET', coreJsUrl);
+      coreJsXHR.send();
+    }
   });
 
   document.getElementById('loadGithub').addEventListener('click', function() {
@@ -759,6 +802,11 @@ window.addEventListener('load', function() {
       pauseButton.className = 'btn btn-primary btn-lg';
       resume();
     }
+  });
+
+  var codeElm = document.getElementById('weird-code');
+  codeElm.addEventListener('change', function() {
+    envScript.text = codeElm.value;
   });
 
   document.getElementById('cancel').addEventListener('click', function() {
