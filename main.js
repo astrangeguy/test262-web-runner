@@ -276,7 +276,7 @@ function runSources(arg, done) {
 
     if (useCoreJS.checked) {
       //w.document.head.appendChild(coreJsScript);
-      append(coreJsScript, false);
+      append(coreJsScript.text, false);
     }
     append(envScript.textContent, false);
     append(arg.setup, false);
